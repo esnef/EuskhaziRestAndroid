@@ -5,8 +5,10 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.PrintWriter;
+import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
 import java.io.Writer;
 import java.util.ArrayList;
@@ -15,6 +17,7 @@ import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.ListIterator;
+import java.util.Map;
 
 import javax.ejb.Singleton;
 import javax.persistence.EntityManager;
@@ -22,12 +25,20 @@ import javax.persistence.PersistenceContext;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.Feature;
+import javax.ws.rs.core.MultivaluedMap;
+import javax.ws.rs.core.Response;
 import javax.ws.rs.Consumes;
+import javax.ws.rs.FormParam;
 import javax.ws.rs.GET;
 import javax.ws.rs.POST;
 import javax.ws.rs.PathParam;
 import javax.ws.rs.Produces;
+import javax.ws.rs.WebApplicationException;
 import javax.ws.rs.core.MediaType;
+
+import org.jboss.resteasy.annotations.providers.multipart.MultipartForm;
+import org.jboss.resteasy.plugins.providers.multipart.InputPart;
+import org.jboss.resteasy.plugins.providers.multipart.MultipartFormDataInput;
 
 import com.google.gson.Gson;
 
@@ -42,6 +53,10 @@ import model.Mobile;
 import model.User;
 
 
+
+
+
+
 @Singleton//Anotación de EJB compatible con Web Service
 @Path("/prueba")
 public class RestServices {
@@ -52,6 +67,98 @@ public class RestServices {
 	
 	@PersistenceContext 
 	EntityManager em;
+	
+	
+	
+	
+	
+	
+	@POST
+	@Path("/upload")
+	@Consumes("multipart/form-data")
+	public Response uploadFile(MultipartFormDataInput input) {
+
+		String fileName = "";
+		
+		Map<String, List<InputPart>> uploadForm = input.getFormDataMap();
+		List<InputPart> inputParts = uploadForm.get("uploadedFile");
+
+		for (InputPart inputPart : inputParts) {
+
+		 try {
+
+			MultivaluedMap<String, String> header = inputPart.getHeaders();
+			fileName = getFileName(header);
+
+			//convert the uploaded file to inputstream
+			InputStream inputStream = inputPart.getBody(InputStream.class,null);
+
+			byte [] bytes = IOUtils.toByteArray(inputStream);
+				
+			//constructs upload file path
+			fileName = System.getProperty(jboss_home_dir)+PATH_FILES +"/"+ fileName;
+				
+			writeFile(bytes,fileName);
+				
+			System.out.println("Done");
+
+		  } catch (IOException e) {
+			e.printStackTrace();
+		  }
+
+		}
+
+		return Response.status(200)
+		    .entity("uploadFile is called, Uploaded file name : " + fileName).build();
+
+	}
+
+	/**
+	 * header sample
+	 * {
+	 * 	Content-Type=[image/png], 
+	 * 	Content-Disposition=[form-data; name="file"; filename="filename.extension"]
+	 * }
+	 **/
+	//get uploaded filename, is there a easy way in RESTEasy?
+	private String getFileName(MultivaluedMap<String, String> header) {
+
+		String[] contentDisposition = header.getFirst("Content-Disposition").split(";");
+		
+		for (String filename : contentDisposition) {
+			if ((filename.trim().startsWith("filename"))) {
+
+				String[] name = filename.split("=");
+				
+				String finalFileName = name[1].trim().replaceAll("\"", "");
+				return finalFileName;
+			}
+		}
+		return "unknown";
+	}
+
+	//save to somewhere
+	private void writeFile(byte[] content, String filename) throws IOException {
+
+		File file = new File(filename);
+
+		if (!file.exists()) {
+			file.createNewFile();
+		}
+
+		FileOutputStream fop = new FileOutputStream(file);
+
+		fop.write(content);
+		fop.flush();
+		fop.close();
+
+	}
+	
+	
+	
+	
+	
+	
 	 
 	@SuppressWarnings("unchecked")
 	@GET
@@ -104,30 +211,31 @@ public class RestServices {
 		if(fileToSave.isFile()){
 			if(fileToSave.delete()){
 				System.out.println("EL ARCHIVO SE HA BORRADO");
-				Gson gson =new Gson();
-				String json=gson.toJson(mobileJSON);
-				if(json==null || json.trim().equals(""))return false;
-				try {
-				Writer writer = new OutputStreamWriter(new FileOutputStream(fileToSave), "UTF-8");
-				PrintWriter out = new PrintWriter(writer);
-				out.println(json.trim());
-				writer.close();
-				return true;
-				} catch (UnsupportedEncodingException | FileNotFoundException e) {
-					// TODO Auto-generated catch block
-					//e.printStackTrace();
-					System.out.println("A");
-				} catch (IOException e) {
-					// TODO Auto-generated catch block
-					//e.printStackTrace();
-					System.out.println("B");
-				}finally{
-				}
+				
 			}else{
 				System.out.println("EL ARCHIVO NO SE HA BORRADO");
 			}
 		}else{
 			System.out.println("NO EXISTE EL ARCHIVO QUE SE QUIERE ACCEDER");
+		}
+		Gson gson =new Gson();
+		String json=gson.toJson(mobileJSON);
+		if(json==null || json.trim().equals(""))return false;
+		try {
+		Writer writer = new OutputStreamWriter(new FileOutputStream(fileToSave), "UTF-8");
+		PrintWriter out = new PrintWriter(writer);
+		out.println(json.trim());
+		writer.close();
+		return true;
+		} catch (UnsupportedEncodingException | FileNotFoundException e) {
+			// TODO Auto-generated catch block
+			//e.printStackTrace();
+			System.out.println("A");
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			//e.printStackTrace();
+			System.out.println("B");
+		}finally{
 		}
 		
 		
@@ -754,3 +862,6 @@ public class RestServices {
 	
 	
 }
+
+
+
